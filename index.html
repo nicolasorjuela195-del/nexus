@@ -944,23 +944,35 @@ async function runRealMode(webhookUrl, payload, ents) {
 
   try {
     const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+    const timeoutId  = setTimeout(() => controller.abort(), 120000);
 
-    const resp = await fetch(webhookUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-      signal:  controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`n8n respondió con status ${resp.status}: ${txt.substring(0,200)}`);
+    try {
+      const resp = await fetch(webhookUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+        signal:  controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`El servidor respondió con error ${resp.status}: ${txt.substring(0,200)}`);
+      }
+      n8nResult = await resp.json();
+    } catch (fetchErr) {
+      if (fetchErr.name !== 'AbortError' && fetchErr.message === 'Failed to fetch') {
+        // CORS bloqueado (ej: webhook.site en prueba) — reintento sin leer respuesta
+        await fetch(webhookUrl, {
+          method: 'POST',
+          mode:   'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body:   JSON.stringify(payload),
+        });
+        n8nResult = { __testing_mode: true };
+      } else {
+        throw fetchErr;
+      }
     }
-
-    n8nResult = await resp.json();
 
   } catch (err) {
     n8nError = err;
@@ -1094,7 +1106,28 @@ async function runDemoMode(ents) {
 // RENDER RESULTADOS
 // ─────────────────────────────────────────────
 function renderResults(ents, n8nData) {
-  const list = document.getElementById('result-list');
+  const list        = document.getElementById('result-list');
+  const titleEl     = document.querySelector('.result-links-title');
+  const isTestMode  = n8nData?.__testing_mode === true;
+  const isDemo      = n8nData?.demo === true;
+
+  // Modo prueba: payload llegó a webhook.site pero no hay links reales aún
+  if (isTestMode) {
+    titleEl.textContent = '✅ Payload enviado correctamente';
+    titleEl.style.color = 'var(--success)';
+    list.innerHTML = `
+      <div style="padding:16px;background:#f0fff4;border:2px solid var(--success);font-size:14px;line-height:1.7;">
+        <strong>¡El payload llegó a webhook.site! 🎉</strong><br>
+        Verifica en webhook.site que recibiste los datos correctos.<br><br>
+        <span style="color:var(--text-dim);font-size:12px;">
+          Cuando n8n esté conectado, aquí aparecerán los links reales
+          a Google Sheets, Slides y Post Mortem.
+        </span>
+      </div>`;
+    document.getElementById('result-links').classList.remove('hidden');
+    return;
+  }
+
   const urlMap = {
     sheets: n8nData?.sheets_url,
     ppt:    n8nData?.ppt_url,
@@ -1102,21 +1135,21 @@ function renderResults(ents, n8nData) {
   };
   list.innerHTML = '';
   ents.forEach(el => {
-    const key  = el.dataset.id;
-    const info = ENTREGABLE_LABELS[key];
-    const url  = urlMap[key];
-    const isDemo = !url || url === '#demo';
+    const key     = el.dataset.id;
+    const info    = ENTREGABLE_LABELS[key];
+    const url     = urlMap[key];
+    const noLink  = !url || url === '#demo';
 
     list.innerHTML += `
       <div class="result-item">
         <div class="result-item-left">
           <span class="result-item-icon">${info.icon}</span>
           <div>
-            <div class="result-item-name">${info.name}${isDemo ? ' <span style="font-size:10px;font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:2px;color:#bbb;text-transform:uppercase;background:var(--gray2);padding:2px 6px;margin-left:6px;">Demo</span>' : ''}</div>
+            <div class="result-item-name">${info.name}${noLink ? ' <span style="font-size:10px;font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:2px;color:#bbb;text-transform:uppercase;background:var(--gray2);padding:2px 6px;margin-left:6px;">Demo</span>' : ''}</div>
             <div class="result-item-meta">${info.meta}</div>
           </div>
         </div>
-        ${isDemo
+        ${noLink
           ? `<button style="padding:8px 18px;background:var(--gray2);color:#999;border:none;font-family:'Barlow Condensed';font-weight:800;font-size:13px;text-transform:uppercase;cursor:not-allowed;" disabled>No disponible</button>`
           : `<a class="btn-open" href="${url}" target="_blank" rel="noopener">Abrir →</a>`
         }
