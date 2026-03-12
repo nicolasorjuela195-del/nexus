@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS · AI Report Generator · ZetaBE</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=Barlow:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --yellow:    #FFE600;
+  --yellow-d:  #E6CF00;
+  --black:     #0A0A0A;
+  --black2:    #111111;
+  --black3:    #1A1A1A;
+  --white:     #FFFFFF;
+  --gray:      #F2F2F2;
+  --gray2:     #E8E8E8;
+  --gray3:     #CCCCCC;
+  --text:      #0A0A0A;
+  --text-mid:  #333333;
+  --text-dim:  #666666;
+  --text-faint:#999999;
+  --success:   #00A650;
+  --error:     #E53935;
+  --warning:   #FF9800;
+  --border:    #E0E0E0;
+  --shadow:    6px 6px 0 var(--black);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Barlow', sans-serif;
+  background: var(--gray);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  background: var(--black);
+  height: 52px;
+  display: flex; align-items: center;
+  padding: 0 32px;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.topbar-left { display: flex; align-items: center; }
+.zeta-logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 22px;
+  color: var(--white);
+  display: flex; align-items: center;
+}
+.zeta-logo .be-box {
+  background: var(--yellow);
+  color: var(--black);
+  padding: 1px 5px;
+  margin-left: 2px;
+  font-size: 20px;
+}
+.nexus-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 18px;
+  letter-spacing: 4px; color: var(--yellow);
+  text-transform: uppercase;
+  margin-left: 20px;
+  border-left: 1px solid #333;
+  padding-left: 20px;
+}
+.topbar-right {
+  color: #555; font-size: 12px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+
+/* ── HERO ── */
+.hero {
+  background: var(--yellow);
+  padding: 48px 32px;
+  display: flex; justify-content: center;
+}
+.hero-layout { max-width: 880px; width: 100%; }
+.hero h1 {
+  font-family: 'Barlow Condensed';
+  font-weight: 900;
+  font-size: clamp(38px, 6.5vw, 66px);
+  color: var(--black);
+  line-height: 0.95;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.hero-sub {
+  font-size: 15px;
+  color: rgba(0,0,0,0.58);
+  max-width: 520px;
+  line-height: 1.65;
+}
+.hero-tag {
+  display: inline-block;
+  background: var(--black);
+  color: var(--yellow);
+  font-family: 'Barlow Condensed';
+  font-weight: 800; font-size: 11px;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+/* ── STEP TRAIL ── */
+.step-trail {
+  background: var(--black2);
+  border-bottom: 3px solid var(--yellow);
+}
+.trail-wrap {
+  max-width: 880px; margin: 0 auto;
+  padding: 0 32px;
+  display: flex; align-items: stretch;
+}
+.trail-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 13px 18px;
+  font-family: 'Barlow Condensed';
+  font-weight: 700; font-size: 12px;
+  text-transform: uppercase;
+  color: #444;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -3px;
+  transition: color 0.3s, border-color 0.3s;
+  white-space: nowrap;
+}
+.trail-item.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+.trail-item.done   { color: #888; }
+.trail-item .step-num {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 900;
+  background: #333; color: #666;
+  transition: background 0.3s, color 0.3s;
+  flex-shrink: 0;
+}
+.trail-item.active .step-num { background: var(--yellow); color: var(--black); }
+.trail-item.done .step-num   { background: #444; color: #aaa; }
+
+/* ── MAIN / CARDS ── */
+.main { max-width: 880px; margin: 0 auto; padding: 28px 32px 80px; }
+
+.card {
+  background: var(--white);
+  border: 2px solid var(--black);
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+.card-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 24px;
+  background: var(--black);
+  color: var(--white);
+  font-family: 'Barlow Condensed';
+  font-weight: 800; font-size: 14px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.card-body { padding: 28px 24px; }
+
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border: 3px dashed var(--gray3);
+  background: var(--gray);
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+.upload-zone:hover,
+.upload-zone.drag-over { border-color: var(--black); background: var(--yellow); }
+.upload-zone input[type="file"] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer;
+  width: 100%; height: 100%;
+}
+.upload-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+.upload-title {
+  font-family: 'Barlow Condensed';
+  font-weight: 800; font-size: 18px;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.upload-hint { font-size: 13px; color: var(--text-dim); }
+
+.btn-leer {
+  background: var(--black); color: var(--yellow);
+  border: 2px solid var(--black);
+  box-shadow: 3px 3px 0 var(--yellow);
+  padding: 11px 22px;
+  font-family: 'Barlow Condensed';
+  font-weight: 900; font-size: 15px;
+  text-transform: uppercase; letter-spacing: 1px;
+  cursor: pointer; white-space: nowrap;
+  transition: transform 0.1s, box-shadow 0.1s;
+  flex-shrink: 0;
+}
+.btn-leer:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 var(--yellow); }
+.btn-leer:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ── FORM / META ── */
+.form-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 16px; margin-top: 20px;
+}
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label {
+  font-family: 'Barlow Condensed';
+  font-weight: 700; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.form-select {
+  padding: 11px 14px;
+  border: 2px solid var(--black);
+  font-family: 'Barlow', sans-serif; font-size: 14px;
+  background: var(--white); cursor: pointer; outline: none;
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%230A0A0A' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+  padding-right: 36px;
+}
+.form-select:focus { box-shadow: 4px 4px 0 var(--yellow); }
+
+.meta-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-top: 20px;
+}
+.meta-item {
+  background: var(--gray); border: 1px solid var(--gray2);
+  padding: 12px 14px;
+}
+.meta-item .meta-key {
+  font-family: 'Barlow Condensed'; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-faint); margin-bottom: 4px;
+}
+.meta-item .meta-val { font-size: 14px; font-weight: 600; color: var(--text); }
+
+/* ── IDs ── */
+.ids-section { margin-top: 24px; }
+.ids-section-title {
+  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
+  color: var(--text-mid); display: flex; align-items: center; gap: 8px;
+}
+.ids-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 10px; max-height: 280px; overflow-y: auto;
+}
+.id-item {
+  padding: 12px 14px; border: 2px solid var(--gray2);
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  user-select: none;
+}
+.id-item:hover { border-color: var(--black); }
+.id-item.selected { border-color: var(--black); background: var(--gray); box-shadow: 3px 3px 0 var(--yellow); }
+.id-item strong { font-family: 'JetBrains Mono'; font-size: 12px; display: block; margin-bottom: 2px; }
+.id-item small { font-size: 12px; color: var(--text-dim); }
+.id-check { float: right; font-size: 16px; }
+
+/* ── ENTREGABLES ── */
+.entregables-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-top: 12px;
+}
+.entregable-item {
+  border: 2px solid var(--gray2); padding: 16px 14px;
+  cursor: pointer; transition: all 0.15s;
+  text-align: center; user-select: none;
+}
+.entregable-item:hover { border-color: var(--black); }
+.entregable-item.selected { border-color: var(--black); background: var(--gray); box-shadow: 3px 3px 0 var(--yellow); }
+.entregable-icon { font-size: 26px; display: block; margin-bottom: 8px; }
+.entregable-name { font-family: 'Barlow Condensed'; font-weight: 800; font-size: 14px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+.entregable-desc { font-size: 11px; color: var(--text-dim); }
+
+/* ── BTN GENERATE ── */
+.btn-gen {
+  display: block; width: 100%;
+  background: var(--yellow); color: var(--black);
+  border: 2px solid var(--black);
+  box-shadow: 4px 4px 0 var(--black);
+  padding: 16px 24px;
+  font-family: 'Barlow Condensed'; font-weight: 900; font-size: 20px;
+  text-transform: uppercase; cursor: pointer; letter-spacing: 1px;
+  margin-top: 24px; transition: transform 0.1s, box-shadow 0.1s;
+}
+.btn-gen:hover:not(:disabled) { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--black); }
+.btn-gen:active:not(:disabled) { transform: translate(2px,2px); box-shadow: 2px 2px 0 var(--black); }
+.btn-gen:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: 4px 4px 0 var(--black); }
+
+/* ── PROGRESS ── */
+.prog-list { list-style: none; }
+.prog-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 0; border-bottom: 1px solid var(--gray2);
+  font-size: 14px; gap: 12px;
+}
+.prog-row:last-child { border-bottom: none; }
+.prog-label { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
+.prog-label .prog-icon { font-size: 16px; }
+.prog-status {
+  font-family: 'Barlow Condensed'; font-weight: 700; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-faint); white-space: nowrap;
+}
+.prog-row.active .prog-label { color: var(--text); font-weight: 600; }
+.prog-row.active .prog-status { color: var(--black); }
+.prog-row.active { background: #fffde0; margin: 0 -24px; padding: 13px 24px; }
+.prog-row.done .prog-label { color: var(--text-faint); }
+.prog-row.done .prog-status { color: var(--success); }
+.prog-row.error-row .prog-label { color: var(--error); }
+.prog-row.error-row .prog-status { color: var(--error); }
+
+/* ── TIMEOUT BAR ── */
+.timeout-track {
+  height: 3px; background: var(--gray2); margin: 16px 0;
+  overflow: hidden; display: none;
+}
+.timeout-fill {
+  height: 100%; background: var(--yellow);
+  width: 0%;
+  transition: width linear;
+}
+
+/* ── PULSE ── */
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.pulse-dot {
+  width: 8px; height: 8px; background: var(--black);
+  border-radius: 50%; display: inline-block;
+  animation: pulse 1s infinite; margin-right: 4px;
+}
+
+/* ── RESULT LINKS ── */
+.result-links { margin-top: 24px; padding-top: 20px; border-top: 3px solid var(--black); }
+.result-links-title {
+  font-family: 'Barlow Condensed'; font-weight: 900; font-size: 16px;
+  text-transform: uppercase; color: var(--success); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.result-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border: 2px solid var(--black);
+  margin-bottom: 8px; background: var(--white);
+}
+.result-item-left { display: flex; align-items: center; gap: 10px; }
+.result-item-icon { font-size: 20px; }
+.result-item-name { font-weight: 600; font-size: 14px; }
+.result-item-meta { font-size: 12px; color: var(--text-dim); }
+.btn-open {
+  background: var(--success); color: var(--white);
+  border: none; padding: 8px 18px;
+  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 13px;
+  text-transform: uppercase; cursor: pointer; letter-spacing: 1px;
+  text-decoration: none; display: inline-block;
+}
+.btn-open:hover { opacity: 0.85; }
+
+/* ── ERROR BOX ── */
+.error-box {
+  background: #ffeaea; border: 2px solid var(--error);
+  padding: 16px 20px; margin-top: 16px;
+  display: none;
+}
+.error-box-title {
+  font-family: 'Barlow Condensed'; font-weight: 900;
+  font-size: 15px; text-transform: uppercase;
+  color: var(--error); margin-bottom: 6px;
+}
+.error-box-msg { font-size: 13px; color: #a00; line-height: 1.6; }
+
+/* ── PAYLOAD VIEWER ── */
+.payload-viewer {
+  background: var(--black3); border: 1px solid #333;
+  padding: 14px 16px; margin-top: 12px;
+  max-height: 200px; overflow-y: auto;
+  display: none;
+}
+.payload-viewer pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: #88ff88; line-height: 1.6;
+  white-space: pre-wrap;
+}
+.btn-toggle-payload {
+  background: none; border: 1px solid #333;
+  color: #666; font-family: 'Barlow Condensed';
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; cursor: pointer; padding: 4px 10px;
+  margin-top: 8px;
+}
+.btn-toggle-payload:hover { border-color: var(--yellow); color: var(--yellow); }
+
+/* ── UTILS ── */
+.hidden { display: none !important; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.fade-in { animation: fadeIn 0.4s ease forwards; }
+.divider { margin: 24px 0; border: none; border-top: 2px solid var(--gray2); }
+.notice {
+  padding: 10px 14px; background: #fff8e1;
+  border-left: 4px solid var(--yellow);
+  font-size: 13px; color: var(--text-mid); margin-top: 16px;
+}
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <div class="zeta-logo">ZETA<span class="be-box">BE</span></div>
+    <span class="nexus-badge">NEXUS</span>
+  </div>
+  <div class="topbar-right">IA Transformation Team · Omnicom</div>
+</nav>
+
+<!-- ── HERO ── -->
+<header class="hero">
+  <div class="hero-layout">
+    <span class="hero-tag">AI Report Generator · v4</span>
+    <h1>Sube tu Plan.<br>Nosotros hacemos el resto.</h1>
+    <p class="hero-sub">
+      NEXUS lee tu Plan Digital en formato Excel, cruza con BigQuery
+      y genera los entregables con insights de IA — sin accesos externos.
+    </p>
+  </div>
+</header>
+
+<!-- ── TRAIL ── -->
+<div class="step-trail">
+  <div class="trail-wrap">
+    <div class="trail-item active" id="t1"><span class="step-num">1</span> Subir Plan</div>
+    <div class="trail-item" id="t2"><span class="step-num">2</span> Confirmar IDs</div>
+    <div class="trail-item" id="t3"><span class="step-num">3</span> Procesando</div>
+    <div class="trail-item" id="t4"><span class="step-num">4</span> Entregables</div>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <!-- CARD 1: Subir archivo -->
+  <section class="card" id="card-upload">
+    <div class="card-head">📂 Plan Digital — Archivo Excel</div>
+    <div class="card-body">
+
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept=".xlsx,.xls" onchange="onFileSelected(this.files[0])">
+        <span class="upload-icon" id="upload-icon">📊</span>
+        <div class="upload-title" id="upload-title">Arrastra tu archivo o haz clic para buscarlo</div>
+        <div class="upload-hint" id="upload-hint">Formato aceptado: .xlsx — Descarga el Sheets y súbelo aquí</div>
+      </div>
+
+      <div id="file-ready-bar" class="hidden" style="margin-top:14px;display:flex;align-items:center;gap:12px;padding:14px 16px;border:2px solid var(--black);background:var(--gray);">
+        <span style="font-size:22px;">📎</span>
+        <div style="flex:1;">
+          <div id="upload-filename" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--black);"></div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px;">Archivo listo — presiona el botón para leer el contenido</div>
+        </div>
+        <button class="btn-leer" id="btn-leer" onclick="readPlan()">Leer Plan →</button>
+      </div>
+
+      <div class="notice">
+        💡 Para obtener el archivo: abre el Plan Digital en Google Sheets → <strong>Archivo → Descargar → Microsoft Excel (.xlsx)</strong>
+      </div>
+
+      <div id="meta-section" class="hidden fade-in" style="margin-top:24px;">
+        <div style="font-family:'Barlow Condensed';font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;color:var(--text-mid);">
+          📋 Metadata encontrada
+        </div>
+        <div class="meta-grid" id="meta-grid"></div>
+      </div>
+
+      <div id="ids-section" class="ids-section hidden fade-in">
+        <hr class="divider">
+        <div class="ids-section-title">
+          🎯 IDs de campaña detectados
+          <span style="font-weight:400;font-size:11px;color:var(--text-faint);">Haz clic para deseleccionar</span>
+        </div>
+        <div class="ids-grid" id="ids-grid"></div>
+      </div>
+
+      <div id="config-section" class="hidden fade-in">
+        <hr class="divider">
+
+        <div class="form-row" style="grid-template-columns:200px 1fr;">
+          <div class="form-group">
+            <label class="form-label">💱 Moneda de reporte</label>
+            <select class="form-select" id="select-moneda">
+              <option value="LC">LC — Moneda local</option>
+              <option value="USD">USD — Dólar</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="ids-section-title" style="margin-top:0;">📦 Entregables a generar</div>
+        <div class="entregables-grid" id="entregables-grid">
+          <div class="entregable-item selected" data-id="sheets" onclick="toggleEntregable(this)">
+            <span class="entregable-icon">📊</span>
+            <span class="entregable-name">Post Buy Sheets</span>
+            <span class="entregable-desc">Reporte de métricas en Google Sheets</span>
+          </div>
+          <div class="entregable-item selected" data-id="ppt" onclick="toggleEntregable(this)">
+            <span class="entregable-icon">📑</span>
+            <span class="entregable-name">Post Buy PPT</span>
+            <span class="entregable-desc">Presentación con learnings e insights</span>
+          </div>
+          <div class="entregable-item selected" data-id="mortem" onclick="toggleEntregable(this)">
+            <span class="entregable-icon">🔍</span>
+            <span class="entregable-name">Post Mortem</span>
+            <span class="entregable-desc">Análisis Online Factor acumulado</span>
+          </div>
+        </div>
+
+        <!-- Payload debug (oculto por defecto) -->
+        <button class="btn-toggle-payload" onclick="togglePayloadViewer()" id="btn-show-payload" style="margin-top:16px;">
+          Ver payload que se enviará →
+        </button>
+        <div class="payload-viewer" id="payload-viewer">
+          <pre id="payload-pre">Selecciona IDs y entregables para ver el payload.</pre>
+        </div>
+
+        <button class="btn-gen" id="btn-gen" onclick="startGeneration()">
+          Generar Reportes →
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CARD 2: Procesando -->
+  <section class="card hidden fade-in" id="card-progress">
+    <div class="card-head" id="progress-head">⚙️ Procesando Campaña</div>
+    <div class="card-body">
+
+      <!-- Barra de timeout -->
+      <div class="timeout-track" id="timeout-track">
+        <div class="timeout-fill" id="timeout-fill"></div>
+      </div>
+
+      <ul class="prog-list">
+        <li class="prog-row" id="pr1">
+          <div class="prog-label"><span class="prog-icon">📂</span> Leyendo Plan Digital</div>
+          <span class="prog-status">Pendiente</span>
+        </li>
+        <li class="prog-row" id="pr2">
+          <div class="prog-label"><span class="prog-icon">🗄️</span> Consultando BigQuery</div>
+          <span class="prog-status">Pendiente</span>
+        </li>
+        <li class="prog-row" id="pr3">
+          <div class="prog-label"><span class="prog-icon">📐</span> Calculando Métricas</div>
+          <span class="prog-status">Pendiente</span>
+        </li>
+        <li class="prog-row" id="pr4">
+          <div class="prog-label"><span class="prog-icon">🤖</span> Generando Insights con IA</div>
+          <span class="prog-status">Pendiente</span>
+        </li>
+        <li class="prog-row" id="pr5">
+          <div class="prog-label"><span class="prog-icon">📤</span> Exportando Entregables</div>
+          <span class="prog-status">Pendiente</span>
+        </li>
+      </ul>
+
+      <!-- Error box -->
+      <div class="error-box" id="error-box">
+        <div class="error-box-title">⚠️ Error en la generación</div>
+        <div class="error-box-msg" id="error-msg"></div>
+      </div>
+
+      <!-- Links resultado -->
+      <div id="result-links" class="result-links hidden fade-in">
+        <div class="result-links-title">✅ ¡Completado! Tus archivos están listos</div>
+        <div id="result-list"></div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:12px;padding-top:10px;border-top:1px solid var(--gray2);">
+          Los archivos se generaron en Google Drive. Los links están listos para compartir.
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ─────────────────────────────────────────────
+// ESTADO GLOBAL
+// ─────────────────────────────────────────────
+let selectedFile   = null;
+let parsedMeta     = null;
+let parsedIds      = [];
+let demoMode       = false;
+let isGenerating   = false;
+
+const ENTREGABLE_LABELS = {
+  sheets: { icon: '📊', name: 'Post Buy Sheets', meta: 'Google Sheets · métricas por ID' },
+  ppt:    { icon: '📑', name: 'Post Buy PPT',    meta: 'Google Slides · 14 slides' },
+  mortem: { icon: '🔍', name: 'Post Mortem',     meta: 'Google Sheets · Online Factor' },
+};
+
+// ─────────────────────────────────────────────
+// ⚙️  CONFIGURACIÓN — Solo el técnico edita esto
+// Pega aquí la URL del Webhook de n8n y guarda el archivo.
+// El usuario nunca verá esta línea.
+// ─────────────────────────────────────────────
+const NEXUS_WEBHOOK_URL = 'https://webhook.site/6bd997b7-8263-404b-91ea-4fd67eb36c4a';
+
+function getWebhookUrl() {
+  return NEXUS_WEBHOOK_URL;
+}
+
+// ─────────────────────────────────────────────
+// DRAG AND DROP
+// ─────────────────────────────────────────────
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) onFileSelected(f);
+});
+
+// ─────────────────────────────────────────────
+// PASO 1: Selección de archivo
+// ─────────────────────────────────────────────
+function onFileSelected(file) {
+  if (!file) return;
+  if (!file.name.match(/\.xlsx?$/i)) {
+    alert('Por favor sube un archivo .xlsx o .xls');
+    return;
+  }
+  selectedFile = file;
+  zone.style.borderColor = 'var(--black)';
+  document.getElementById('upload-icon').textContent = '✅';
+  document.getElementById('upload-title').textContent = 'Archivo seleccionado';
+  document.getElementById('upload-hint').textContent  = 'Puedes cambiarlo haciendo clic aquí';
+  document.getElementById('upload-filename').textContent = file.name;
+
+  const bar = document.getElementById('file-ready-bar');
+  bar.classList.remove('hidden'); bar.style.display = 'flex';
+
+  document.getElementById('meta-section').classList.add('hidden');
+  document.getElementById('ids-section').classList.add('hidden');
+  document.getElementById('config-section').classList.add('hidden');
+  const btn = document.getElementById('btn-leer');
+  btn.disabled = false;
+  btn.textContent = 'Leer Plan →';
+}
+
+// ─────────────────────────────────────────────
+// PASO 2: Leer Plan
+// ─────────────────────────────────────────────
+function readPlan() {
+  if (!selectedFile) return;
+  const btn = document.getElementById('btn-leer');
+  btn.disabled = true; btn.textContent = 'Leyendo…';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'binary' });
+      const meta = parseResumen(wb);
+      const ids  = parsePlanDigital(wb);
+
+      if (!meta || ids.length === 0) {
+        btn.disabled = false; btn.textContent = '⚠️ No se encontraron datos';
+        alert('No se encontraron las hojas RESUMEN o PLAN DIGITAL VF. Verifica que el archivo sea el correcto.');
+        return;
+      }
+
+      parsedMeta = meta;
+      parsedIds  = ids;
+      btn.textContent = '✓ Plan Leído';
+      renderPlanData(meta, ids);
+    } catch(err) {
+      console.error(err);
+      btn.disabled = false; btn.textContent = '⚠️ Error al leer';
+      alert('Ocurrió un error al leer el archivo. Asegúrate de que sea un .xlsx válido.');
+    }
+  };
+  reader.onerror = () => { btn.disabled = false; btn.textContent = '⚠️ Error al leer'; };
+  reader.readAsBinaryString(selectedFile);
+}
+
+// ─────────────────────────────────────────────
+// PARSERS
+// ─────────────────────────────────────────────
+function parseResumen(wb) {
+  const ws = wb.Sheets['RESUMEN'];
+  if (!ws) return null;
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, cellDates: true });
+
+  function findLabel(label) {
+    for (let r = 0; r < data.length; r++) {
+      const row = data[r] || [];
+      for (let c = 0; c < row.length; c++) {
+        if (typeof row[c] === 'string' && row[c].trim().toUpperCase() === label.toUpperCase()) {
+          for (let cc = c + 1; cc < row.length; cc++) {
+            if (row[cc] !== null && row[cc] !== '') return { val: row[cc], row: r, col: c, row_data: row };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  const fmtDate = (v) => {
+    if (!v) return null;
+    if (v instanceof Date) return v.toISOString().split('T')[0];
+    if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 86400 * 1000)); return d.toISOString().split('T')[0]; }
+    return String(v);
+  };
+  const fmtNum = (v) => { if (v === null || v === undefined) return 'N/D'; return Number(v).toLocaleString('es-CO'); };
+
+  const site       = findLabel('SITE');
+  const brand      = findLabel('BRAND');
+  const nombreCamp = findLabel('NOMBRE DE CAMPAÑA');
+  const fechaIni   = findLabel('FECHA INICIO');
+  const fechaFin   = findLabel('FECHA FIN');
+  const media      = findLabel('MEDIA');
+
+  let nombreTecnico = null;
+  if (nombreCamp) {
+    let found = false;
+    for (let c = 0; c < nombreCamp.row_data.length; c++) {
+      if (nombreCamp.row_data[c] === nombreCamp.val) { found = true; continue; }
+      if (found && nombreCamp.row_data[c] !== null && nombreCamp.row_data[c] !== '') {
+        nombreTecnico = nombreCamp.row_data[c]; break;
+      }
+    }
+  }
+
+  return {
+    display: {
+      'Site':             site?.val       || null,
+      'Brand':            brand?.val      || null,
+      'Nombre Comercial': nombreCamp?.val || null,
+      'Nombre Técnico':   nombreTecnico   || null,
+      'Fecha Inicio':     fmtDate(fechaIni?.val),
+      'Fecha Fin':        fmtDate(fechaFin?.val),
+      'Budget (LC)':      fmtNum(media?.val),
+    },
+    raw: {
+      site:             site?.val       || null,
+      brand:            brand?.val      || null,
+      nombre_comercial: nombreCamp?.val || null,
+      nombre_tecnico:   nombreTecnico   || null,
+      fecha_inicio:     fmtDate(fechaIni?.val),
+      fecha_fin:        fmtDate(fechaFin?.val),
+      budget_lc:        media?.val      || null,
+    }
+  };
+}
+
+function parsePlanDigital(wb) {
+  const ws = wb.Sheets['PLAN DIGITAL VF'];
+  if (!ws) return [];
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const rows = data.slice(2);
+  const result = [];
+  for (const row of rows) {
+    const id_campaign = String(row[0] || '').trim();
+    const medio_full  = String(row[8] || '').trim();
+    const objetivo    = String(row[9] || '').trim();
+    if (!id_campaign) continue;
+    if (!/^\d+$/.test(id_campaign)) continue;
+    if (medio_full.toUpperCase().startsWith('DIRECTO-')) continue;
+    result.push({
+      id:           id_campaign,
+      displayLabel: `${medio_full} · ${objetivo}`,
+      medio:        medio_full,
+      objetivo:     objetivo,
+    });
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────
+function renderPlanData(meta, ids) {
+  const grid = document.getElementById('meta-grid');
+  grid.innerHTML = Object.entries(meta.display)
+    .map(([k, v]) => `<div class="meta-item"><div class="meta-key">${k}</div><div class="meta-val">${v || '—'}</div></div>`).join('');
+  document.getElementById('meta-section').classList.remove('hidden');
+
+  const idsGrid = document.getElementById('ids-grid');
+  if (ids.length === 0) {
+    idsGrid.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px;">No se encontraron IDs válidos.</div>';
+  } else {
+    idsGrid.innerHTML = ids.map(item => `
+      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}">
+        <span class="id-check">✓</span>
+        <strong style="font-size:11px;">${item.displayLabel}</strong>
+        <small style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);margin-top:4px;display:block;">${item.id}</small>
+      </div>`).join('');
+  }
+
+  document.getElementById('ids-section').classList.remove('hidden');
+  document.getElementById('config-section').classList.remove('hidden');
+  setTrail(1, 'done'); setTrail(2, 'active');
+  updatePayloadPreview();
+}
+
+function toggleId(el) {
+  el.classList.toggle('selected');
+  el.querySelector('.id-check').textContent = el.classList.contains('selected') ? '✓' : '○';
+  updatePayloadPreview();
+}
+
+function toggleEntregable(el) {
+  el.classList.toggle('selected');
+  const any = document.querySelectorAll('.entregable-item.selected').length > 0;
+  document.getElementById('btn-gen').disabled = !any;
+  updatePayloadPreview();
+}
+
+// ─────────────────────────────────────────────
+// PAYLOAD PREVIEW
+// ─────────────────────────────────────────────
+function buildPayload() {
+  const selectedIdEls = document.querySelectorAll('.id-item.selected');
+  const ids_validos = Array.from(selectedIdEls).map(el => ({
+    id:       el.dataset.id,
+    medio:    el.dataset.medio,
+    objetivo: el.dataset.objetivo,
+  }));
+
+  const entregables = Array.from(document.querySelectorAll('.entregable-item.selected'))
+    .map(el => el.dataset.id);
+
+  return {
+    resumen:     parsedMeta?.raw || {},
+    ids_validos: ids_validos,
+    moneda:      document.getElementById('select-moneda').value,
+    entregables: entregables,
+  };
+}
+
+function updatePayloadPreview() {
+  const pre = document.getElementById('payload-pre');
+  pre.textContent = JSON.stringify(buildPayload(), null, 2);
+}
+
+function togglePayloadViewer() {
+  const viewer = document.getElementById('payload-viewer');
+  const isVisible = viewer.style.display === 'block';
+  viewer.style.display = isVisible ? 'none' : 'block';
+  document.getElementById('btn-show-payload').textContent = isVisible ? 'Ver payload que se enviará →' : 'Ocultar payload ↑';
+  if (!isVisible) updatePayloadPreview();
+}
+
+// ─────────────────────────────────────────────
+// TRAIL
+// ─────────────────────────────────────────────
+function setTrail(num, state) {
+  const el = document.getElementById('t' + num);
+  el.classList.remove('active', 'done');
+  if (state) el.classList.add(state);
+}
+
+// ─────────────────────────────────────────────
+// GENERACIÓN REAL
+// ─────────────────────────────────────────────
+async function startGeneration() {
+  if (isGenerating) return;
+
+  const ids  = document.querySelectorAll('.id-item.selected');
+  const ents = document.querySelectorAll('.entregable-item.selected');
+  if (!ids.length)  { alert('Selecciona al menos un ID de campaña.'); return; }
+  if (!ents.length) { alert('Selecciona al menos un entregable.'); return; }
+
+  const webhookUrl = getWebhookUrl();
+  if (!webhookUrl) {
+    // URL no configurada → modo demo automático
+    demoMode = true;
+  } else {
+    demoMode = false;
+  }
+
+  isGenerating = true;
+
+  // Bloquear card de config
+  const cardUpload = document.getElementById('card-upload');
+  cardUpload.style.opacity = '0.45';
+  cardUpload.style.pointerEvents = 'none';
+
+  // Mostrar card de progreso
+  const cardProg = document.getElementById('card-progress');
+  cardProg.classList.remove('hidden');
+  cardProg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  setTrail(2, 'done'); setTrail(3, 'active');
+
+  // Reset de estados
+  ['pr1','pr2','pr3','pr4','pr5'].forEach(id => {
+    const row = document.getElementById(id);
+    row.classList.remove('active','done','error-row');
+    row.querySelector('.prog-status').textContent = 'Pendiente';
+  });
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('result-links').classList.add('hidden');
+
+  const payload = buildPayload();
+
+  if (demoMode) {
+    await runDemoMode(ents);
+    return;
+  }
+
+  // ── MODO REAL: llamar n8n ──
+  await runRealMode(webhookUrl, payload, ents);
+}
+
+// ─────────────────────────────────────────────
+// MODO REAL
+// ─────────────────────────────────────────────
+async function runRealMode(webhookUrl, payload, ents) {
+
+  // Tiempos estimados por paso (se van "completando" mientras esperamos n8n)
+  const STEP_TIMES = [4000, 8000, 5000, 15000, 6000]; // ms por paso
+  const TOTAL_TIME = STEP_TIMES.reduce((a,b) => a+b, 0); // ~38s
+
+  // Iniciar barra de progreso de tiempo
+  startTimeoutBar(TOTAL_TIME);
+
+  // Animar pasos de forma independiente (UX)
+  const animPromise = animateStepsWithTimings(STEP_TIMES);
+
+  // Llamar n8n con timeout generoso
+  let n8nResult = null;
+  let n8nError  = null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
+    const resp = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+      signal:  controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`n8n respondió con status ${resp.status}: ${txt.substring(0,200)}`);
+    }
+
+    n8nResult = await resp.json();
+
+  } catch (err) {
+    n8nError = err;
+  }
+
+  // Esperar que terminen las animaciones de pasos
+  await animPromise;
+  stopTimeoutBar();
+
+  if (n8nError) {
+    markStepError('pr5', n8nError.message || String(n8nError));
+    showErrorBox(n8nError);
+    isGenerating = false;
+    return;
+  }
+
+  // Éxito: mostrar links reales
+  setTrail(3, 'done'); setTrail(4, 'active');
+  document.getElementById('progress-head').textContent = '✅ Proceso Completado';
+  renderResults(ents, n8nResult);
+  isGenerating = false;
+}
+
+// ─────────────────────────────────────────────
+// ANIMACIÓN DE PASOS
+// ─────────────────────────────────────────────
+async function animateStepsWithTimings(timings) {
+  const ids = ['pr1','pr2','pr3','pr4','pr5'];
+  for (let i = 0; i < ids.length; i++) {
+    const row      = document.getElementById(ids[i]);
+    const statusEl = row.querySelector('.prog-status');
+    row.classList.add('active');
+    statusEl.innerHTML = '<span class="pulse-dot"></span> En proceso…';
+    await sleep(timings[i]);
+    row.classList.remove('active');
+    row.classList.add('done');
+    statusEl.innerHTML = 'Listo ✓';
+  }
+}
+
+// ─────────────────────────────────────────────
+// BARRA DE TIMEOUT
+// ─────────────────────────────────────────────
+let timeoutInterval = null;
+function startTimeoutBar(totalMs) {
+  const track = document.getElementById('timeout-track');
+  const fill  = document.getElementById('timeout-fill');
+  track.style.display = 'block';
+  fill.style.transition = 'none'; fill.style.width = '0%';
+  const start = Date.now();
+  timeoutInterval = setInterval(() => {
+    const pct = Math.min(((Date.now() - start) / totalMs) * 100, 100);
+    fill.style.transition = 'width 0.5s linear';
+    fill.style.width = pct + '%';
+  }, 500);
+}
+function stopTimeoutBar() {
+  if (timeoutInterval) { clearInterval(timeoutInterval); timeoutInterval = null; }
+  document.getElementById('timeout-fill').style.width = '100%';
+}
+
+// ─────────────────────────────────────────────
+// ERROR HELPERS
+// ─────────────────────────────────────────────
+function markStepError(stepId, msg) {
+  const row      = document.getElementById(stepId);
+  const statusEl = row.querySelector('.prog-status');
+  row.classList.remove('active','done');
+  row.classList.add('error-row');
+  statusEl.textContent = '✗ Error';
+}
+
+function showErrorBox(err) {
+  const box = document.getElementById('error-box');
+  const msg = document.getElementById('error-msg');
+  box.style.display = 'block';
+  const isAbort = err.name === 'AbortError';
+  if (isAbort) {
+    msg.innerHTML = `
+      <strong>Tiempo de espera agotado.</strong> n8n no respondió en 2 minutos.<br><br>
+      Posibles causas:<br>
+      • El flujo de n8n está inactivo (activar en n8n → toggle ON)<br>
+      • BigQuery tardó demasiado<br>
+      • La URL del webhook no es correcta<br><br>
+      Intenta de nuevo o revisa los logs de n8n.
+    `;
+  } else {
+    msg.innerHTML = `
+      <strong>Error al conectar con n8n:</strong><br>
+      ${err.message || String(err)}<br><br>
+      Verifica que la URL del webhook sea correcta y que el flujo esté activo.
+    `;
+  }
+}
+
+// ─────────────────────────────────────────────
+// MODO DEMO
+// ─────────────────────────────────────────────
+async function runDemoMode(ents) {
+  const steps = [
+    { id: 'pr1', time: 1500 },
+    { id: 'pr2', time: 2200 },
+    { id: 'pr3', time: 1800 },
+    { id: 'pr4', time: 2500 },
+    { id: 'pr5', time: 1200 },
+  ];
+  for (const step of steps) {
+    const row = document.getElementById(step.id);
+    const st  = row.querySelector('.prog-status');
+    row.classList.add('active');
+    st.innerHTML = '<span class="pulse-dot"></span> En proceso…';
+    await sleep(step.time);
+    row.classList.remove('active'); row.classList.add('done');
+    st.innerHTML = 'Listo ✓';
+  }
+  setTrail(3, 'done'); setTrail(4, 'active');
+  document.getElementById('progress-head').textContent = '✅ Demo Completado';
+
+  // Resultado falso para demo
+  const demoResult = {
+    sheets_url: '#demo',
+    ppt_url:    '#demo',
+    mortem_url: '#demo',
+    demo: true,
+  };
+  renderResults(ents, demoResult);
+  isGenerating = false;
+}
+
+// ─────────────────────────────────────────────
+// RENDER RESULTADOS
+// ─────────────────────────────────────────────
+function renderResults(ents, n8nData) {
+  const list = document.getElementById('result-list');
+  const urlMap = {
+    sheets: n8nData?.sheets_url,
+    ppt:    n8nData?.ppt_url,
+    mortem: n8nData?.mortem_url,
+  };
+  list.innerHTML = '';
+  ents.forEach(el => {
+    const key  = el.dataset.id;
+    const info = ENTREGABLE_LABELS[key];
+    const url  = urlMap[key];
+    const isDemo = !url || url === '#demo';
+
+    list.innerHTML += `
+      <div class="result-item">
+        <div class="result-item-left">
+          <span class="result-item-icon">${info.icon}</span>
+          <div>
+            <div class="result-item-name">${info.name}${isDemo ? ' <span style="font-size:10px;font-family:\'Barlow Condensed\';font-weight:700;letter-spacing:2px;color:#bbb;text-transform:uppercase;background:var(--gray2);padding:2px 6px;margin-left:6px;">Demo</span>' : ''}</div>
+            <div class="result-item-meta">${info.meta}</div>
+          </div>
+        </div>
+        ${isDemo
+          ? `<button style="padding:8px 18px;background:var(--gray2);color:#999;border:none;font-family:'Barlow Condensed';font-weight:800;font-size:13px;text-transform:uppercase;cursor:not-allowed;" disabled>No disponible</button>`
+          : `<a class="btn-open" href="${url}" target="_blank" rel="noopener">Abrir →</a>`
+        }
+      </div>`;
+  });
+  document.getElementById('result-links').classList.remove('hidden');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
