@@ -776,11 +776,20 @@ function parsePlanDigital(wb) {
     if (!id_campaign) continue;
     if (!/^\d+$/.test(id_campaign)) continue;
     if (medio_full.toUpperCase().startsWith('DIRECTO-')) continue;
+
+    // Columnas adicionales para Online Factor
+    const inv_usd    = parseFloat(row[54]) || 0;   // Col 55: INVERSION_TOTAL_USD
+    const target_ctr = parseFloat(row[73]) || 0;   // Col 74: CTR (target del plan)
+    const target_vtr = parseFloat(row[69]) || 0;   // Col 70: VTR (target del plan)
+
     result.push({
       id:           id_campaign,
       displayLabel: `${medio_full} · ${objetivo}`,
       medio:        medio_full,
       objetivo:     objetivo,
+      inv_usd:      Math.round(inv_usd * 100) / 100,
+      target_ctr:   Math.round(target_ctr * 10000) / 10000,
+      target_vtr:   Math.round(target_vtr * 10000) / 10000,
     });
   }
   return result;
@@ -800,10 +809,10 @@ function renderPlanData(meta, ids) {
     idsGrid.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px;">No se encontraron IDs válidos.</div>';
   } else {
     idsGrid.innerHTML = ids.map(item => `
-      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}">
+      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}" data-inv-usd="${item.inv_usd}" data-target-ctr="${item.target_ctr}" data-target-vtr="${item.target_vtr}">
         <span class="id-check">✓</span>
         <strong style="font-size:11px;">${item.displayLabel}</strong>
-        <small style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);margin-top:4px;display:block;">${item.id}</small>
+        <small style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);margin-top:4px;display:block;">${item.id} · USD ${item.inv_usd.toLocaleString('es-CO')}</small>
       </div>`).join('');
   }
 
@@ -832,9 +841,12 @@ function toggleEntregable(el) {
 function buildPayload() {
   const selectedIdEls = document.querySelectorAll('.id-item.selected');
   const ids_validos = Array.from(selectedIdEls).map(el => ({
-    id:       el.dataset.id,
-    medio:    el.dataset.medio,
-    objetivo: el.dataset.objetivo,
+    id:         el.dataset.id,
+    medio:      el.dataset.medio,
+    objetivo:   el.dataset.objetivo,
+    inv_usd:    parseFloat(el.dataset.invUsd)    || 0,
+    target_ctr: parseFloat(el.dataset.targetCtr) || 0,
+    target_vtr: parseFloat(el.dataset.targetVtr) || 0,
   }));
 
   const entregables = Array.from(document.querySelectorAll('.entregable-item.selected'))
