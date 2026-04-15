@@ -840,6 +840,73 @@ function toggleEntregable(el) {
 // ─────────────────────────────────────────────
 // PAYLOAD PREVIEW
 // ─────────────────────────────────────────────
+
+// Clasifica cada línea del plan en su bucket de Online Factor
+function classifyBuckets(ids) {
+  const buckets = {
+    ctr: {
+      dv_display:   { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+      tiktok_ctr:   { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+      meta_ctr:     { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+    },
+    vtr: {
+      meta_vtr:     { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+      tiktok_views: { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+      youtube_vvc:  { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+      dv_video:     { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+      pinterest:    { ids: [], target: 0, inv_usd: 0, inv_lc: 0 },
+    }
+  };
+
+  for (const line of ids) {
+    const m = line.medio.toUpperCase();
+    const o = line.objetivo.toUpperCase();
+    let bucket = null;
+
+    // Sección CTR
+    if (m.includes('DV360') && m.includes('OPEN BANNER'))        bucket = buckets.ctr.dv_display;
+    else if (m.includes('TIKTOK') && o === 'TRAFFIC')            bucket = buckets.ctr.tiktok_ctr;
+    else if (m.includes('META') && o === 'TRAFFIC')              bucket = buckets.ctr.meta_ctr;
+    // Sección VTR
+    else if (m.includes('META') && o === 'VIEWS')                bucket = buckets.vtr.meta_vtr;
+    else if (m.includes('TIKTOK') && o === 'VIEWS')              bucket = buckets.vtr.tiktok_views;
+    else if (m.includes('YOUTUBE') && m.includes('VVC'))         bucket = buckets.vtr.youtube_vvc;
+    else if (m.includes('DV360') && m.includes('OPEN VIDEO'))    bucket = buckets.vtr.dv_video;
+    else if (m.includes('PINTEREST') && o === 'VIEWS')           bucket = buckets.vtr.pinterest;
+
+    if (bucket) {
+      bucket.ids.push(line.id);
+      bucket.inv_usd += line.inv_usd;
+      bucket.inv_lc  += line.inv_lc;
+    }
+  }
+
+  // Calcular target ponderado por inversión USD para cada bucket
+  for (const section of ['ctr', 'vtr']) {
+    for (const key in buckets[section]) {
+      const b = buckets[section][key];
+      if (b.ids.length === 0) continue;
+
+      const isCtr = section === 'ctr';
+      let sumWeighted = 0;
+      let sumInv = 0;
+
+      for (const id of b.ids) {
+        const line = ids.find(l => l.id === id);
+        const target = isCtr ? line.target_ctr : line.target_vtr;
+        sumWeighted += target * line.inv_usd;
+        sumInv += line.inv_usd;
+      }
+
+      b.target = sumInv > 0 ? Math.round((sumWeighted / sumInv) * 10000) / 10000 : 0;
+      b.inv_usd = Math.round(b.inv_usd * 100) / 100;
+      b.inv_lc  = Math.round(b.inv_lc * 100) / 100;
+    }
+  }
+
+  return buckets;
+}
+
 function buildPayload() {
   const selectedIdEls = document.querySelectorAll('.id-item.selected');
   const ids_validos = Array.from(selectedIdEls).map(el => ({
@@ -856,10 +923,11 @@ function buildPayload() {
     .map(el => el.dataset.id);
 
   return {
-    resumen:     parsedMeta?.raw || {},
-    ids_validos: ids_validos,
-    moneda:      document.getElementById('select-moneda').value,
-    entregables: entregables,
+    resumen:        parsedMeta?.raw || {},
+    ids_validos:    ids_validos,
+    online_factor:  classifyBuckets(ids_validos),
+    moneda:         document.getElementById('select-moneda').value,
+    entregables:    entregables,
   };
 }
 
