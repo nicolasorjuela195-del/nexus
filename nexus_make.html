@@ -599,6 +599,7 @@ body {
 let selectedFile   = null;
 let parsedMeta     = null;
 let parsedIds      = [];
+let parsedBitacora = [];
 let demoMode       = false;
 let isGenerating   = false;
 
@@ -669,9 +670,10 @@ function readPlan() {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const wb   = XLSX.read(e.target.result, { type: 'binary' });
-      const meta = parseResumen(wb);
-      const ids  = parsePlanDigital(wb);
+      const wb       = XLSX.read(e.target.result, { type: 'binary' });
+      const meta     = parseResumen(wb);
+      const ids      = parsePlanDigital(wb);
+      const bitacora = parseReporteSemanal(wb);
 
       if (!meta || ids.length === 0) {
         btn.disabled = false; btn.textContent = '⚠️ No se encontraron datos';
@@ -679,8 +681,9 @@ function readPlan() {
         return;
       }
 
-      parsedMeta = meta;
-      parsedIds  = ids;
+      parsedMeta     = meta;
+      parsedIds      = ids;
+      parsedBitacora = bitacora;
       btn.textContent = '✓ Plan Leído';
       renderPlanData(meta, ids);
     } catch(err) {
@@ -728,7 +731,8 @@ function parseResumen(wb) {
   const nombreCamp = findLabel('NOMBRE DE CAMPAÑA');
   const fechaIni   = findLabel('FECHA INICIO');
   const fechaFin   = findLabel('FECHA FIN');
-  const media      = findLabel('MEDIA');
+  // El budget ahora se llama "BUDGET APROBADO" (antes era "MEDIA"). Fallback por compatibilidad.
+  const media      = findLabel('BUDGET APROBADO') || findLabel('MEDIA');
 
   let nombreTecnico = null;
   if (nombreCamp) {
@@ -793,6 +797,70 @@ function parsePlanDigital(wb) {
       target_ctr:   Math.round(target_ctr * 10000) / 10000,
       target_vtr:   Math.round(target_vtr * 10000) / 10000,
     });
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────
+// Parser de la BITÁCORA del Reporte Semanal BQ
+// Extrae la tabla MEDIO | WEEK/DATE | INSIGHT/HIGHLIGHT que está al final
+// de la hoja "Reporte Semanal BQ". Esta tabla contiene los aprendizajes
+// y optimizaciones que escribe manualmente el analista durante la campaña.
+// ─────────────────────────────────────────────
+function parseReporteSemanal(wb) {
+  // Acepta nombres viejo y nuevo de la hoja
+  const ws = wb.Sheets['Reporte Semanal BQ'] || wb.Sheets['Reporte Semanal 5.0'];
+  if (!ws) return [];
+
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, cellDates: true });
+
+  // Helper para formatear fechas (Date | número Excel | string) a YYYY-MM-DD
+  const fmtDate = (v) => {
+    if (!v) return null;
+    if (v instanceof Date) return v.toISOString().split('T')[0];
+    if (typeof v === 'number') {
+      const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+      return d.toISOString().split('T')[0];
+    }
+    return String(v).trim();
+  };
+
+  // Buscar la fila con encabezado: B="MEDIO" | C contiene "WEEK" o "DATE" | D contiene "INSIGHT" o "HIGHLIGHT"
+  let headerRow = -1;
+  for (let r = 0; r < data.length; r++) {
+    const row = data[r] || [];
+    const b = String(row[1] || '').trim().toUpperCase();
+    const c = String(row[2] || '').trim().toUpperCase();
+    const d = String(row[3] || '').trim().toUpperCase();
+    if (b === 'MEDIO' && (c.includes('WEEK') || c.includes('DATE')) && (d.includes('INSIGHT') || d.includes('HIGHLIGHT'))) {
+      headerRow = r;
+      break;
+    }
+  }
+  if (headerRow === -1) return [];
+
+  // Leer filas debajo del encabezado, parar en la primera fila vacía
+  const result = [];
+  for (let r = headerRow + 1; r < data.length; r++) {
+    const row = data[r] || [];
+    const medio   = row[1];
+    const fecha   = row[2];
+    const insight = row[3];
+
+    // Si las tres columnas relevantes están vacías → fin de la tabla
+    const isEmpty = (medio === null || String(medio).trim() === '') &&
+                    (fecha === null || String(fecha).trim() === '') &&
+                    (insight === null || String(insight).trim() === '');
+    if (isEmpty) break;
+
+    // Solo agregamos filas que tengan al menos medio + insight
+    if (medio && insight) {
+      result.push({
+        medio:   String(medio).trim(),
+        fecha:   fmtDate(fecha),
+        insight: String(insight).trim(),
+      });
+    }
   }
   return result;
 }
@@ -907,6 +975,48 @@ function classifyBuckets(ids) {
   return buckets;
 }
 
+// Genera texto pre-formateado del mapeo de buckets para incluir en el prompt de Claude
+function buildBucketMappingText(buckets) {
+  const labels = {
+    dv_display:   'DV Ads Display (Open Banner)',
+    tiktok_ctr:   'TikTok CTR (Tráfico)',
+    meta_ctr:     'Meta CTR (Tráfico)',
+    meta_vtr:     'Meta VTR (Views)',
+    tiktok_views: 'TikTok Views',
+    youtube_vvc:  'YouTube VVC',
+    dv_video:     'DV Ads Video (Open Video)',
+    pinterest:    'Pinterest Views',
+  };
+
+  let text = 'CLASIFICACION ONLINE FACTOR - BUCKETS Y CAMPAIGN IDS:\n\n';
+  text += 'SECCION CTR (metrica = Clicks / Impressions):\n';
+  for (const key of ['dv_display', 'tiktok_ctr', 'meta_ctr']) {
+    const b = buckets.ctr[key];
+    if (b.ids.length > 0) {
+      text += '- ' + labels[key] + ': Campaign_ids=[' + b.ids.join(', ') + '], target=' + b.target + '\n';
+    } else {
+      text += '- ' + labels[key] + ': SIN LINEAS EN ESTA CAMPANA\n';
+    }
+  }
+  text += '\nSECCION VTR (metrica = Views / Impressions):\n';
+  for (const key of ['meta_vtr', 'tiktok_views', 'youtube_vvc', 'dv_video', 'pinterest']) {
+    const b = buckets.vtr[key];
+    if (b.ids.length > 0) {
+      text += '- ' + labels[key] + ': Campaign_ids=[' + b.ids.join(', ') + '], target=' + b.target + '\n';
+    } else {
+      text += '- ' + labels[key] + ': SIN LINEAS EN ESTA CAMPANA\n';
+    }
+  }
+  text += '\nINSTRUCCIONES ONLINE FACTOR:\n';
+  text += 'Para cada bucket CON lineas, busca en las metricas los Campaign_ids listados y calcula:\n';
+  text += '- inv_usd_real: suma de Investment_USD de BigQuery para esos Campaign_ids\n';
+  text += '- metric_real: para CTR = sum(Clicks)/sum(Impressions), para VTR = sum(Views)/sum(Impressions)\n';
+  text += 'Redondea inv_usd_real a 0 decimales y metric_real a 4 decimales.\n';
+  text += 'Para buckets SIN LINEAS, usa inv_usd_real=0, metric_real=0.\n';
+
+  return text;
+}
+
 function buildPayload() {
   const selectedIdEls = document.querySelectorAll('.id-item.selected');
   const ids_validos = Array.from(selectedIdEls).map(el => ({
@@ -922,12 +1032,16 @@ function buildPayload() {
   const entregables = Array.from(document.querySelectorAll('.entregable-item.selected'))
     .map(el => el.dataset.id);
 
+  const of_buckets = classifyBuckets(ids_validos);
+
   return {
-    resumen:        parsedMeta?.raw || {},
-    ids_validos:    ids_validos,
-    online_factor:  classifyBuckets(ids_validos),
-    moneda:         document.getElementById('select-moneda').value,
-    entregables:    entregables,
+    resumen:                parsedMeta?.raw || {},
+    ids_validos:            ids_validos,
+    online_factor:          of_buckets,
+    bucket_mapping_text:    buildBucketMappingText(of_buckets),
+    bitacora_optimizaciones: parsedBitacora || [],
+    moneda:                 document.getElementById('select-moneda').value,
+    entregables:            entregables,
   };
 }
 
