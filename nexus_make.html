@@ -943,15 +943,20 @@ function classifyBuckets(ids) {
     const o = line.objetivo.toUpperCase();
     let bucket = null;
 
+    // Helpers para soportar nomenclatura vieja ("OPEN BANNER", "OPEN VIDEO")
+    // y nueva ("OPEN - DISPLAY", "OPEN - VIDEO")
+    const isDvDisplay = m.includes('DV360') && (m.includes('OPEN BANNER') || m.includes('OPEN - DISPLAY') || m.includes('OPEN-DISPLAY'));
+    const isDvVideo   = m.includes('DV360') && (m.includes('OPEN VIDEO')  || m.includes('OPEN - VIDEO')   || m.includes('OPEN-VIDEO'));
+
     // Sección CTR
-    if (m.includes('DV360') && m.includes('OPEN BANNER'))        bucket = buckets.ctr.dv_display;
+    if (isDvDisplay)                                             bucket = buckets.ctr.dv_display;
     else if (m.includes('TIKTOK') && o === 'TRAFFIC')            bucket = buckets.ctr.tiktok_ctr;
     else if (m.includes('META') && o === 'TRAFFIC')              bucket = buckets.ctr.meta_ctr;
     // Sección VTR
     else if (m.includes('META') && o === 'VIEWS')                bucket = buckets.vtr.meta_vtr;
     else if (m.includes('TIKTOK') && o === 'VIEWS')              bucket = buckets.vtr.tiktok_views;
     else if (m.includes('YOUTUBE') && m.includes('VVC'))         bucket = buckets.vtr.youtube_vvc;
-    else if (m.includes('DV360') && m.includes('OPEN VIDEO'))    bucket = buckets.vtr.dv_video;
+    else if (isDvVideo)                                          bucket = buckets.vtr.dv_video;
     else if (m.includes('PINTEREST') && o === 'VIEWS')           bucket = buckets.vtr.pinterest;
 
     if (bucket) {
