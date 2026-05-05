@@ -955,7 +955,8 @@ function classifyBuckets(ids) {
     // Sección VTR
     else if (m.includes('META') && o === 'VIEWS')                bucket = buckets.vtr.meta_vtr;
     else if (m.includes('TIKTOK') && o === 'VIEWS')              bucket = buckets.vtr.tiktok_views;
-    else if (m.includes('YOUTUBE') && m.includes('VVC'))         bucket = buckets.vtr.youtube_vvc;
+    else if (m.includes('YOUTUBE') && (m.includes('VVC') || m.includes('VIDEO VIEWS CAMPAIGN')))
+                                                                 bucket = buckets.vtr.youtube_vvc;
     else if (isDvVideo)                                          bucket = buckets.vtr.dv_video;
     else if (m.includes('PINTEREST') && o === 'VIEWS')           bucket = buckets.vtr.pinterest;
 
