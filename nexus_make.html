@@ -806,6 +806,11 @@ function parsePlanDigital(wb) {
 // Extrae la tabla MEDIO | WEEK/DATE | INSIGHT/HIGHLIGHT que está al final
 // de la hoja "Reporte Semanal BQ". Esta tabla contiene los aprendizajes
 // y optimizaciones que escribe manualmente el analista durante la campaña.
+//
+// Nota técnica: SheetJS normaliza los arrays al rango real de la hoja
+// (ej: si la hoja arranca en B1, row[0] = columna B). Por eso buscamos
+// las 3 columnas consecutivas que tengan el patrón del header en lugar
+// de hardcodear índices, así funciona con cualquier offset de origen.
 // ─────────────────────────────────────────────
 function parseReporteSemanal(wb) {
   // Acepta nombres viejo y nuevo de la hoja
@@ -825,17 +830,24 @@ function parseReporteSemanal(wb) {
     return String(v).trim();
   };
 
-  // Buscar la fila con encabezado: B="MEDIO" | C contiene "WEEK" o "DATE" | D contiene "INSIGHT" o "HIGHLIGHT"
+  // Buscar las 3 columnas consecutivas con el patrón de header del Reporte Semanal BQ:
+  // [MEDIO] | [WEEK/DATE] | [INSIGHT/HIGHLIGHT]
   let headerRow = -1;
+  let colMedio = -1, colFecha = -1, colInsight = -1;
+
   for (let r = 0; r < data.length; r++) {
     const row = data[r] || [];
-    const b = String(row[1] || '').trim().toUpperCase();
-    const c = String(row[2] || '').trim().toUpperCase();
-    const d = String(row[3] || '').trim().toUpperCase();
-    if (b === 'MEDIO' && (c.includes('WEEK') || c.includes('DATE')) && (d.includes('INSIGHT') || d.includes('HIGHLIGHT'))) {
-      headerRow = r;
-      break;
+    for (let c = 0; c < row.length - 2; c++) {
+      const a = String(row[c]   || '').trim().toUpperCase();
+      const b = String(row[c+1] || '').trim().toUpperCase();
+      const cc= String(row[c+2] || '').trim().toUpperCase();
+      if (a === 'MEDIO' && (b.includes('WEEK') || b.includes('DATE')) && (cc.includes('INSIGHT') || cc.includes('HIGHLIGHT'))) {
+        headerRow = r;
+        colMedio = c; colFecha = c+1; colInsight = c+2;
+        break;
+      }
     }
+    if (headerRow !== -1) break;
   }
   if (headerRow === -1) return [];
 
@@ -843,14 +855,14 @@ function parseReporteSemanal(wb) {
   const result = [];
   for (let r = headerRow + 1; r < data.length; r++) {
     const row = data[r] || [];
-    const medio   = row[1];
-    const fecha   = row[2];
-    const insight = row[3];
+    const medio   = row[colMedio];
+    const fecha   = row[colFecha];
+    const insight = row[colInsight];
 
     // Si las tres columnas relevantes están vacías → fin de la tabla
-    const isEmpty = (medio === null || String(medio).trim() === '') &&
-                    (fecha === null || String(fecha).trim() === '') &&
-                    (insight === null || String(insight).trim() === '');
+    const isEmpty = (medio === null || medio === undefined || String(medio).trim() === '') &&
+                    (fecha === null || fecha === undefined || String(fecha).trim() === '') &&
+                    (insight === null || insight === undefined || String(insight).trim() === '');
     if (isEmpty) break;
 
     // Solo agregamos filas que tengan al menos medio + insight
