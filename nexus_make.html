@@ -684,8 +684,21 @@ function readPlan() {
       parsedMeta     = meta;
       parsedIds      = ids;
       parsedBitacora = bitacora;
+
+      // Enriquecer el meta con TRX y código de moneda local — son uniformes por campaña.
+      // Los tomamos de la primera línea válida del plan (no están en el RESUMEN sino en cada línea).
+      if (ids.length > 0) {
+        const trx = ids[0].tasa_cambio;
+        const mon = ids[0].tipo_moneda;
+        parsedMeta.raw.tasa_cambio = trx;
+        parsedMeta.raw.tipo_moneda = mon;
+        parsedMeta.display['TRX (LC/USD)'] = trx
+          ? Number(trx).toLocaleString('es-CO', { maximumFractionDigits: 2 })
+          : '—';
+        parsedMeta.display['Moneda Local'] = mon || '—';
+      }
       btn.textContent = '✓ Plan Leído';
-      renderPlanData(meta, ids);
+      renderPlanData(parsedMeta, ids);
     } catch(err) {
       console.error(err);
       btn.disabled = false; btn.textContent = '⚠️ Error al leer';
@@ -782,20 +795,33 @@ function parsePlanDigital(wb) {
     if (medio_full.toUpperCase().startsWith('DIRECTO-')) continue;
 
     // Columnas adicionales para Online Factor y reportes
-    const inv_lc     = parseFloat(row[51]) || 0;   // Col 52: INVERSION_TOTAL_LC
-    const inv_usd    = parseFloat(row[54]) || 0;   // Col 55: INVERSION_TOTAL_USD
-    const target_ctr = parseFloat(row[73]) || 0;   // Col 74: CTR (target del plan)
-    const target_vtr = parseFloat(row[69]) || 0;   // Col 70: VTR (target del plan)
+    const inv_lc        = parseFloat(row[51]) || 0;   // Col 52: INVERSION_TOTAL_LC
+    const inv_usd       = parseFloat(row[54]) || 0;   // Col 55: INVERSION_TOTAL_USD
+    const target_ctr    = parseFloat(row[73]) || 0;   // Col 74: CTR (target del plan)
+    const target_vtr    = parseFloat(row[69]) || 0;   // Col 70: VTR (target del plan)
+    const observaciones = String(row[23] || '').trim();  // Col 24 (X): OBSERVACIONES — desambiguador
+    const tipo_moneda   = String(row[32] || '').trim();  // Col 33 (AG): TIPO_MONEDA local (BRL, USD, COP...)
+    const tasa_cambio   = parseFloat(row[33]) || 0;      // Col 34 (AH): TASA_CAMBIO (TRX) — uniforme por campaña
+
+    // nombre_post_buy = medio + objetivo + (observaciones si las hay)
+    // Se usa en fila 19 del Post Buy Sheets para distinguir líneas con el mismo medio/objetivo (ej: Test A vs Test B)
+    const nombre_post_buy = observaciones
+      ? `${medio_full} · ${objetivo} · ${observaciones}`
+      : `${medio_full} · ${objetivo}`;
 
     result.push({
-      id:           id_campaign,
-      displayLabel: `${medio_full} · ${objetivo}`,
-      medio:        medio_full,
-      objetivo:     objetivo,
-      inv_lc:       Math.round(inv_lc * 100) / 100,
-      inv_usd:      Math.round(inv_usd * 100) / 100,
-      target_ctr:   Math.round(target_ctr * 10000) / 10000,
-      target_vtr:   Math.round(target_vtr * 10000) / 10000,
+      id:              id_campaign,
+      displayLabel:    nombre_post_buy,
+      medio:           medio_full,
+      objetivo:        objetivo,
+      observaciones:   observaciones,
+      nombre_post_buy: nombre_post_buy,
+      inv_lc:          Math.round(inv_lc * 100) / 100,
+      inv_usd:         Math.round(inv_usd * 100) / 100,
+      target_ctr:      Math.round(target_ctr * 10000) / 10000,
+      target_vtr:      Math.round(target_vtr * 10000) / 10000,
+      tipo_moneda:     tipo_moneda,
+      tasa_cambio:     tasa_cambio,
     });
   }
   return result;
@@ -891,7 +917,7 @@ function renderPlanData(meta, ids) {
     idsGrid.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px;">No se encontraron IDs válidos.</div>';
   } else {
     idsGrid.innerHTML = ids.map(item => `
-      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}" data-inv-lc="${item.inv_lc}" data-inv-usd="${item.inv_usd}" data-target-ctr="${item.target_ctr}" data-target-vtr="${item.target_vtr}">
+      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}" data-observaciones="${(item.observaciones || '').replace(/"/g, '&quot;')}" data-nombre-post-buy="${(item.nombre_post_buy || '').replace(/"/g, '&quot;')}" data-inv-lc="${item.inv_lc}" data-inv-usd="${item.inv_usd}" data-target-ctr="${item.target_ctr}" data-target-vtr="${item.target_vtr}">
         <span class="id-check">✓</span>
         <strong style="font-size:11px;">${item.displayLabel}</strong>
         <small style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);margin-top:4px;display:block;">${item.id} · USD ${item.inv_usd.toLocaleString('es-CO')} · LC ${item.inv_lc.toLocaleString('es-CO')}</small>
@@ -1038,13 +1064,15 @@ function buildBucketMappingText(buckets) {
 function buildPayload() {
   const selectedIdEls = document.querySelectorAll('.id-item.selected');
   const ids_validos = Array.from(selectedIdEls).map(el => ({
-    id:         el.dataset.id,
-    medio:      el.dataset.medio,
-    objetivo:   el.dataset.objetivo,
-    inv_lc:     parseFloat(el.dataset.invLc)     || 0,
-    inv_usd:    parseFloat(el.dataset.invUsd)    || 0,
-    target_ctr: parseFloat(el.dataset.targetCtr) || 0,
-    target_vtr: parseFloat(el.dataset.targetVtr) || 0,
+    id:               el.dataset.id,
+    medio:            el.dataset.medio,
+    objetivo:         el.dataset.objetivo,
+    observaciones:    el.dataset.observaciones    || '',
+    nombre_post_buy:  el.dataset.nombrePostBuy    || '',
+    inv_lc:           parseFloat(el.dataset.invLc)     || 0,
+    inv_usd:          parseFloat(el.dataset.invUsd)    || 0,
+    target_ctr:       parseFloat(el.dataset.targetCtr) || 0,
+    target_vtr:       parseFloat(el.dataset.targetVtr) || 0,
   }));
 
   const entregables = Array.from(document.querySelectorAll('.entregable-item.selected'))
