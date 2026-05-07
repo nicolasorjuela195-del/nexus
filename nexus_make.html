@@ -1061,6 +1061,101 @@ function buildBucketMappingText(buckets) {
   return text;
 }
 
+// ─────────────────────────────────────────────
+// HITS/MISS — Clasificación distinta a Online Factor
+// Esta taxonomía clasifica cada línea en una de las 4 categorías fijas
+// del Post Buy Sheets (sección CREATIVIDADES). NO es la misma del Online Factor.
+//
+//   - CTR DISPLAY: DV360 + OPEN BANNER (Display, NO Video)
+//   - CTR META:    Meta + (TRAFFIC OR CONVERSIONS)
+//   - VTR META:    Meta + (ENGAGEMENT OR VIEWS)
+//   - VTR TIKTOK:  TikTok + VIEWS
+//
+// Líneas que no caen en ninguna categoría no entran a Hits/Miss
+// (Pinterest entero, YouTube, DV360-OPEN Video, TikTok no-VIEWS, etc.)
+// ─────────────────────────────────────────────
+function classifyHitsMiss(ids) {
+  const cat = {
+    ctr_display: { ids: [], inv_usd: 0, inv_lc: 0, target: 0 },
+    ctr_meta:    { ids: [], inv_usd: 0, inv_lc: 0, target: 0 },
+    vtr_meta:    { ids: [], inv_usd: 0, inv_lc: 0, target: 0 },
+    vtr_tiktok:  { ids: [], inv_usd: 0, inv_lc: 0, target: 0 },
+  };
+
+  for (const line of ids) {
+    const m = line.medio.toUpperCase();
+    const o = line.objetivo.toUpperCase();
+    let bucket = null;
+
+    // CTR DISPLAY: DV360 + OPEN BANNER (Display) — soporta nomenclatura vieja y nueva
+    const isDvDisplay = m.includes('DV360') &&
+                        (m.includes('OPEN BANNER') || m.includes('OPEN - DISPLAY') || m.includes('OPEN-DISPLAY'));
+
+    if (isDvDisplay)                                                              bucket = cat.ctr_display;
+    else if (m.includes('META')   && (o === 'TRAFFIC'    || o === 'CONVERSIONS')) bucket = cat.ctr_meta;
+    else if (m.includes('META')   && (o === 'ENGAGEMENT' || o === 'VIEWS'))       bucket = cat.vtr_meta;
+    else if (m.includes('TIKTOK') && o === 'VIEWS')                               bucket = cat.vtr_tiktok;
+
+    if (bucket) {
+      bucket.ids.push(line.id);
+      bucket.inv_usd += line.inv_usd;
+      bucket.inv_lc  += line.inv_lc;
+    }
+  }
+
+  // Calcular target ponderado por inversión USD (CTR para ctr_*, VTR para vtr_*)
+  for (const key in cat) {
+    const b = cat[key];
+    if (b.ids.length === 0) continue;
+    const isCtr = key.startsWith('ctr_');
+    let sumWeighted = 0;
+    let sumInv = 0;
+    for (const id of b.ids) {
+      const line = ids.find(l => l.id === id);
+      const target = isCtr ? line.target_ctr : line.target_vtr;
+      sumWeighted += target * line.inv_usd;
+      sumInv      += line.inv_usd;
+    }
+    b.target  = sumInv > 0 ? Math.round((sumWeighted / sumInv) * 10000) / 10000 : 0;
+    b.inv_usd = Math.round(b.inv_usd * 100) / 100;
+    b.inv_lc  = Math.round(b.inv_lc  * 100) / 100;
+  }
+
+  return cat;
+}
+
+// Texto pre-formateado del mapping Hits/Miss para incluir en el prompt de Claude.
+// Convención igual que buildBucketMappingText: ASCII puro (sin acentos) para evitar
+// que Make/Claude se confunda con encoding en strings largos.
+function buildHitsMissMappingText(cat) {
+  const labels = {
+    ctr_display: 'CTR DISPLAY (DV360 Open Banner / Display)',
+    ctr_meta:    'CTR META (Traffic + Conversions)',
+    vtr_meta:    'VTR META (Engagement + Views)',
+    vtr_tiktok:  'VTR TIKTOK (Views)',
+  };
+
+  let text = 'TAXONOMIA HITS/MISS - CAMPAIGN IDS Y TARGETS POR CATEGORIA:\n\n';
+  for (const key of ['ctr_display', 'ctr_meta', 'vtr_meta', 'vtr_tiktok']) {
+    const b = cat[key];
+    if (b.ids.length > 0) {
+      const tipoMetric = key.startsWith('ctr_') ? 'ctr' : 'vtr';
+      text += '- ' + labels[key] + ': Campaign_ids=[' + b.ids.join(', ') + '], target_' + tipoMetric + '=' + b.target + ', inv_usd=' + b.inv_usd + '\n';
+    } else {
+      text += '- ' + labels[key] + ': SIN LINEAS EN ESTA CAMPANA\n';
+    }
+  }
+  text += '\nINSTRUCCIONES HITS/MISS:\n';
+  text += 'Para cada categoria CON lineas, busca en las metricas POR CREATIVO los Adnames cuyo Campaign_id este en la lista de la categoria, y filtra solo los que tengan SOI_categoria_pct >= 5%.\n';
+  text += 'De los candidatos filtrados:\n';
+  text += '- HIT: el creativo con MEJOR metrica vs target (CTR mas alto para CTR_*, VTR mas alto para VTR_*).\n';
+  text += '- MISS: el creativo con PEOR metrica vs target.\n';
+  text += 'Si una categoria no tiene candidatos con SOI >= 5%, baja el threshold a 3% como fallback.\n';
+  text += 'Si tampoco hay candidatos al 3%, devuelve null para esa categoria.\n';
+
+  return text;
+}
+
 function buildPayload() {
   const selectedIdEls = document.querySelectorAll('.id-item.selected');
   const ids_validos = Array.from(selectedIdEls).map(el => ({
@@ -1079,15 +1174,18 @@ function buildPayload() {
     .map(el => el.dataset.id);
 
   const of_buckets = classifyBuckets(ids_validos);
+  const hm_categorias = classifyHitsMiss(ids_validos);
 
   return {
-    resumen:                parsedMeta?.raw || {},
-    ids_validos:            ids_validos,
-    online_factor:          of_buckets,
-    bucket_mapping_text:    buildBucketMappingText(of_buckets),
+    resumen:                 parsedMeta?.raw || {},
+    ids_validos:             ids_validos,
+    online_factor:           of_buckets,
+    bucket_mapping_text:     buildBucketMappingText(of_buckets),
+    hits_miss_categorias:    hm_categorias,
+    hits_miss_mapping_text:  buildHitsMissMappingText(hm_categorias),
     bitacora_optimizaciones: parsedBitacora || [],
-    moneda:                 document.getElementById('select-moneda').value,
-    entregables:            entregables,
+    moneda:                  document.getElementById('select-moneda').value,
+    entregables:             entregables,
   };
 }
 
