@@ -802,6 +802,16 @@ function parsePlanDigital(wb) {
     const observaciones = String(row[23] || '').trim();  // Col 24 (X): OBSERVACIONES — desambiguador
     const tipo_moneda   = String(row[32] || '').trim();  // Col 33 (AG): TIPO_MONEDA local (BRL, USD, COP...)
     const tasa_cambio   = parseFloat(row[33]) || 0;      // Col 34 (AH): TASA_CAMBIO (TRX) — uniforme por campaña
+    const tipo_compra   = String(row[10] || '').trim();  // Col 11 (K): TIPO_COMPRA — detecta DEALS y filtra DIRECTO
+
+    // Plan targets para PERFORMANCE ON del Post Buy Sheets (Lote 5b)
+    const target_iiee        = parseFloat(row[86]) || 0; // Col 87 (CI): CCEE_PROYECTADOS (IIEE planeado)
+    const target_fq          = parseFloat(row[62]) || 0; // Col 63 (BK): FQ_SEMANAL (frecuencia plan)
+    const target_reach       = parseFloat(row[60]) || 0; // Col 61 (BI): REACH#
+    const target_impresiones = parseFloat(row[63]) || 0; // Col 64 (BL): IMPRESIONES (plan)
+
+    // Filtro adicional: excluir líneas con TIPO_COMPRA conteniendo DIRECTO (no van a reportes)
+    if (tipo_compra.toUpperCase().includes('DIRECTO')) continue;
 
     // nombre_post_buy = medio + objetivo + (observaciones si las hay)
     // Se usa en fila 19 del Post Buy Sheets para distinguir líneas con el mismo medio/objetivo (ej: Test A vs Test B)
@@ -810,18 +820,23 @@ function parsePlanDigital(wb) {
       : `${medio_full} · ${objetivo}`;
 
     result.push({
-      id:              id_campaign,
-      displayLabel:    nombre_post_buy,
-      medio:           medio_full,
-      objetivo:        objetivo,
-      observaciones:   observaciones,
-      nombre_post_buy: nombre_post_buy,
-      inv_lc:          Math.round(inv_lc * 100) / 100,
-      inv_usd:         Math.round(inv_usd * 100) / 100,
-      target_ctr:      Math.round(target_ctr * 10000) / 10000,
-      target_vtr:      Math.round(target_vtr * 10000) / 10000,
-      tipo_moneda:     tipo_moneda,
-      tasa_cambio:     tasa_cambio,
+      id:                  id_campaign,
+      displayLabel:        nombre_post_buy,
+      medio:               medio_full,
+      objetivo:            objetivo,
+      observaciones:       observaciones,
+      nombre_post_buy:     nombre_post_buy,
+      inv_lc:              Math.round(inv_lc * 100) / 100,
+      inv_usd:             Math.round(inv_usd * 100) / 100,
+      target_ctr:          Math.round(target_ctr * 10000) / 10000,
+      target_vtr:          Math.round(target_vtr * 10000) / 10000,
+      target_iiee:         Math.round(target_iiee),
+      target_fq:           Math.round(target_fq * 100) / 100,
+      target_reach:        Math.round(target_reach),
+      target_impresiones:  Math.round(target_impresiones),
+      tipo_moneda:         tipo_moneda,
+      tasa_cambio:         tasa_cambio,
+      tipo_compra:         tipo_compra,
     });
   }
   return result;
@@ -917,7 +932,7 @@ function renderPlanData(meta, ids) {
     idsGrid.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px;">No se encontraron IDs válidos.</div>';
   } else {
     idsGrid.innerHTML = ids.map(item => `
-      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}" data-observaciones="${(item.observaciones || '').replace(/"/g, '&quot;')}" data-nombre-post-buy="${(item.nombre_post_buy || '').replace(/"/g, '&quot;')}" data-inv-lc="${item.inv_lc}" data-inv-usd="${item.inv_usd}" data-target-ctr="${item.target_ctr}" data-target-vtr="${item.target_vtr}">
+      <div class="id-item selected" onclick="toggleId(this)" data-id="${item.id}" data-medio="${item.medio}" data-objetivo="${item.objetivo}" data-observaciones="${(item.observaciones || '').replace(/"/g, '&quot;')}" data-nombre-post-buy="${(item.nombre_post_buy || '').replace(/"/g, '&quot;')}" data-inv-lc="${item.inv_lc}" data-inv-usd="${item.inv_usd}" data-target-ctr="${item.target_ctr}" data-target-vtr="${item.target_vtr}" data-target-iiee="${item.target_iiee}" data-target-fq="${item.target_fq}" data-target-reach="${item.target_reach}" data-target-impresiones="${item.target_impresiones}" data-tipo-compra="${(item.tipo_compra || '').replace(/"/g, '&quot;')}">
         <span class="id-check">✓</span>
         <strong style="font-size:11px;">${item.displayLabel}</strong>
         <small style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);margin-top:4px;display:block;">${item.id} · USD ${item.inv_usd.toLocaleString('es-CO')} · LC ${item.inv_lc.toLocaleString('es-CO')}</small>
@@ -1063,16 +1078,13 @@ function buildBucketMappingText(buckets) {
 
 // ─────────────────────────────────────────────
 // HITS/MISS — Clasificación distinta a Online Factor
-// Esta taxonomía clasifica cada línea en una de las 4 categorías fijas
-// del Post Buy Sheets (sección CREATIVIDADES). NO es la misma del Online Factor.
+// Clasifica cada línea en una de las 4 categorías fijas del Post Buy Sheets
+// (sección CREATIVIDADES). NO es la misma del Online Factor.
 //
 //   - CTR DISPLAY: DV360 + OPEN BANNER (Display, NO Video)
 //   - CTR META:    Meta + (TRAFFIC OR CONVERSIONS)
 //   - VTR META:    Meta + (ENGAGEMENT OR VIEWS)
 //   - VTR TIKTOK:  TikTok + VIEWS
-//
-// Líneas que no caen en ninguna categoría no entran a Hits/Miss
-// (Pinterest entero, YouTube, DV360-OPEN Video, TikTok no-VIEWS, etc.)
 // ─────────────────────────────────────────────
 function classifyHitsMiss(ids) {
   const cat = {
@@ -1087,7 +1099,6 @@ function classifyHitsMiss(ids) {
     const o = line.objetivo.toUpperCase();
     let bucket = null;
 
-    // CTR DISPLAY: DV360 + OPEN BANNER (Display) — soporta nomenclatura vieja y nueva
     const isDvDisplay = m.includes('DV360') &&
                         (m.includes('OPEN BANNER') || m.includes('OPEN - DISPLAY') || m.includes('OPEN-DISPLAY'));
 
@@ -1103,7 +1114,7 @@ function classifyHitsMiss(ids) {
     }
   }
 
-  // Calcular target ponderado por inversión USD (CTR para ctr_*, VTR para vtr_*)
+  // Target ponderado por inversión USD (CTR para ctr_*, VTR para vtr_*)
   for (const key in cat) {
     const b = cat[key];
     if (b.ids.length === 0) continue;
@@ -1124,9 +1135,6 @@ function classifyHitsMiss(ids) {
   return cat;
 }
 
-// Texto pre-formateado del mapping Hits/Miss para incluir en el prompt de Claude.
-// Convención igual que buildBucketMappingText: ASCII puro (sin acentos) para evitar
-// que Make/Claude se confunda con encoding en strings largos.
 function buildHitsMissMappingText(cat) {
   const labels = {
     ctr_display: 'CTR DISPLAY (DV360 Open Banner / Display)',
@@ -1156,24 +1164,81 @@ function buildHitsMissMappingText(cat) {
   return text;
 }
 
+// ─────────────────────────────────────────────
+// SORT + COLUMN ASSIGNMENT — para PERFORMANCE ON del Post Buy Sheets (Lote 5b)
+// Template tiene 56 grupos de 3 columnas: Plan, Real, Var %
+//   Grupo 1: D-E-F | Grupo 2: G-H-I | ... | Grupo 56: FM-FN-FO
+// Orden: Meta -> TikTok -> Pinterest -> DV360-YT -> DV360-OPEN -> Twitter -> Deals
+// Tie-breaker dentro de plataforma: inversión USD descendente
+// ─────────────────────────────────────────────
+function platformPriority(line) {
+  const m  = (line.medio || '').toUpperCase();
+  const tc = (line.tipo_compra || '').toUpperCase();
+  if (tc.includes('DEAL'))                                  return 7;
+  if (m.includes('META'))                                   return 1;
+  if (m.includes('TIKTOK'))                                 return 2;
+  if (m.includes('PINTEREST'))                              return 3;
+  if (m.includes('DV360') && m.includes('YOUTUBE'))         return 4;
+  if (m.includes('DV360') && m.includes('OPEN'))            return 5;
+  if (m.includes('TWITTER'))                                return 6;
+  return 8;
+}
+
+function colLetter(n) {
+  let s = '';
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function sortAndAssignColumns(ids_validos) {
+  // 1. Sort por plataforma + inv_usd desc
+  ids_validos.sort((a, b) => {
+    const pa = platformPriority(a);
+    const pb = platformPriority(b);
+    if (pa !== pb) return pa - pb;
+    return b.inv_usd - a.inv_usd;
+  });
+
+  // 2. Asignar columnas Sheets por grupo (Plan, Real, Var %)
+  ids_validos.forEach((line, i) => {
+    const baseCol = 4 + i * 3;  // 1-based: D=4, G=7, J=10, ..., FM=169
+    line.groupColPlan = colLetter(baseCol);
+    line.groupColReal = colLetter(baseCol + 1);
+    line.groupColVar  = colLetter(baseCol + 2);
+  });
+}
+
 function buildPayload() {
   const selectedIdEls = document.querySelectorAll('.id-item.selected');
   const ids_validos = Array.from(selectedIdEls).map(el => ({
-    id:               el.dataset.id,
-    medio:            el.dataset.medio,
-    objetivo:         el.dataset.objetivo,
-    observaciones:    el.dataset.observaciones    || '',
-    nombre_post_buy:  el.dataset.nombrePostBuy    || '',
-    inv_lc:           parseFloat(el.dataset.invLc)     || 0,
-    inv_usd:          parseFloat(el.dataset.invUsd)    || 0,
-    target_ctr:       parseFloat(el.dataset.targetCtr) || 0,
-    target_vtr:       parseFloat(el.dataset.targetVtr) || 0,
+    id:                  el.dataset.id,
+    medio:               el.dataset.medio,
+    objetivo:            el.dataset.objetivo,
+    observaciones:       el.dataset.observaciones        || '',
+    nombre_post_buy:     el.dataset.nombrePostBuy        || '',
+    inv_lc:              parseFloat(el.dataset.invLc)              || 0,
+    inv_usd:             parseFloat(el.dataset.invUsd)             || 0,
+    target_ctr:          parseFloat(el.dataset.targetCtr)          || 0,
+    target_vtr:          parseFloat(el.dataset.targetVtr)          || 0,
+    target_iiee:         parseFloat(el.dataset.targetIiee)         || 0,
+    target_fq:           parseFloat(el.dataset.targetFq)           || 0,
+    target_reach:        parseFloat(el.dataset.targetReach)        || 0,
+    target_impresiones:  parseFloat(el.dataset.targetImpresiones)  || 0,
+    tipo_compra:         el.dataset.tipoCompra                     || '',
   }));
+
+  // Sort por plataforma + inv_usd desc y asignar columnas Sheets (Lote 5b — PERFORMANCE ON)
+  // Modifica ids_validos in-place agregando groupColPlan / groupColReal / groupColVar
+  sortAndAssignColumns(ids_validos);
 
   const entregables = Array.from(document.querySelectorAll('.entregable-item.selected'))
     .map(el => el.dataset.id);
 
-  const of_buckets = classifyBuckets(ids_validos);
+  const of_buckets    = classifyBuckets(ids_validos);
   const hm_categorias = classifyHitsMiss(ids_validos);
 
   return {
@@ -1221,6 +1286,12 @@ async function startGeneration() {
   const ents = document.querySelectorAll('.entregable-item.selected');
   if (!ids.length)  { alert('Selecciona al menos un ID de campaña.'); return; }
   if (!ents.length) { alert('Selecciona al menos un entregable.'); return; }
+
+  // Lote 5b: warning si >56 líneas (template Post Buy Sheets soporta máximo 56 grupos)
+  if (ids.length > 56) {
+    const proceed = confirm(`Hay ${ids.length} líneas seleccionadas pero el template Post Buy Sheets soporta máximo 56 grupos en PERFORMANCE ON. Solo las primeras 56 (ordenadas por plataforma + inversión USD desc) van a aparecer. ¿Continuar?`);
+    if (!proceed) return;
+  }
 
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
