@@ -1336,75 +1336,118 @@ async function startGeneration() {
 }
 
 // ─────────────────────────────────────────────
-// MODO REAL
+// MODO REAL — múltiples requests en paralelo
+//
+// Cada entregable se manda como una request SEPARADA al webhook.
+// Razón: Make ejecuta cada rama del Router en paralelo, pero solo el primer
+// Webhook Response llega al cliente. Si pedimos 2 entregables en una sola
+// request, recibimos solo 1 URL (la más rápida). Solución: 1 request por
+// entregable, esperar a TODAS con Promise.allSettled, combinar respuestas.
+//
+// Tradeoff: 2x operaciones de Make si pedís 2 entregables. En plan Free
+// (1000 ops/mes) no es problema. La UX gana: la pantalla "Completado"
+// solo aparece cuando TODOS los archivos están listos.
 // ─────────────────────────────────────────────
 async function runRealMode(webhookUrl, payload, ents) {
 
-  // Tiempos estimados por paso (se van "completando" mientras esperamos n8n)
-  const STEP_TIMES = [4000, 8000, 5000, 15000, 6000]; // ms por paso
-  const TOTAL_TIME = STEP_TIMES.reduce((a,b) => a+b, 0); // ~38s
+  const entregablesList = Array.from(ents).map(el => el.dataset.id);
 
-  // Iniciar barra de progreso de tiempo
+  // Tiempos estimados por paso (decorativo - la animación marca "completado" en ~38s,
+  // pero los resultados reales solo aparecen cuando todos los fetches terminan).
+  const STEP_TIMES = [4000, 8000, 5000, 15000, 6000];
+  const TOTAL_TIME = STEP_TIMES.reduce((a,b) => a+b, 0);
+
   startTimeoutBar(TOTAL_TIME);
-
-  // Animar pasos de forma independiente (UX)
   const animPromise = animateStepsWithTimings(STEP_TIMES);
 
-  // Llamar n8n con timeout generoso
-  let n8nResult = null;
-  let n8nError  = null;
-
-  try {
+  // ── Lanzar 1 fetch por cada entregable, en paralelo ──
+  // Cada fetch envía el payload base + un array entregables con UN SOLO valor.
+  // Make procesa esa request, el Router activa solo la rama que coincide,
+  // y devuelve la URL de ESE entregable.
+  const requests = entregablesList.map(entregable => {
+    const singlePayload = { ...payload, entregables: [entregable] };
     const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 120000);
+    const timeoutId  = setTimeout(() => controller.abort(), 180000); // 3 min por entregable
 
-    try {
-      const resp = await fetch(webhookUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-        signal:  controller.signal,
-      });
+    return fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(singlePayload),
+      signal:  controller.signal,
+    })
+    .then(async resp => {
       clearTimeout(timeoutId);
       if (!resp.ok) {
         const txt = await resp.text();
-        throw new Error(`El servidor respondió con error ${resp.status}: ${txt.substring(0,200)}`);
+        throw new Error(`Error ${resp.status} en "${entregable}": ${txt.substring(0,200)}`);
       }
-      n8nResult = await resp.json();
-    } catch (fetchErr) {
-      if (fetchErr.name !== 'AbortError' && fetchErr.message === 'Failed to fetch') {
-        // CORS bloqueado (ej: webhook.site en prueba) — reintento sin leer respuesta
+      return resp.json();
+    })
+    .catch(async err => {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error(`Timeout en "${entregable}": el servidor tardó más de 3 minutos`);
+      }
+      if (err.message === 'Failed to fetch') {
+        // CORS bloqueado (ej: webhook.site) — reintento sin leer respuesta
         await fetch(webhookUrl, {
           method: 'POST',
           mode:   'no-cors',
           headers: { 'Content-Type': 'application/json' },
-          body:   JSON.stringify(payload),
+          body:   JSON.stringify(singlePayload),
         });
-        n8nResult = { __testing_mode: true };
-      } else {
-        throw fetchErr;
+        return { __testing_mode: true };
       }
-    }
+      throw err;
+    });
+  });
 
-  } catch (err) {
-    n8nError = err;
-  }
+  // Esperar a TODAS las requests — Promise.allSettled NO falla aunque alguna falle.
+  // Cada elemento del array final tiene {status: 'fulfilled'|'rejected', value/reason}.
+  const results = await Promise.allSettled(requests);
 
-  // Esperar que terminen las animaciones de pasos
+  // Esperar a que termine la animación visual de pasos (si todavía no terminó)
   await animPromise;
   stopTimeoutBar();
 
-  if (n8nError) {
-    markStepError('pr5', n8nError.message || String(n8nError));
-    showErrorBox(n8nError);
+  // Combinar las respuestas exitosas en un único objeto urlMap
+  const combinedResult = {};
+  const errors = [];
+  let testingMode = false;
+
+  results.forEach((res, idx) => {
+    if (res.status === 'fulfilled') {
+      const data = res.value;
+      if (data.__testing_mode) testingMode = true;
+      else Object.assign(combinedResult, data);
+    } else {
+      errors.push({
+        entregable: entregablesList[idx],
+        error: res.reason,
+      });
+    }
+  });
+
+  if (testingMode) combinedResult.__testing_mode = true;
+
+  // Si TODAS fallaron, mostrar error global
+  if (errors.length === entregablesList.length && !testingMode) {
+    const firstErr = errors[0].error;
+    markStepError('pr5', firstErr?.message || String(firstErr));
+    showErrorBox(firstErr || new Error('Todas las requests fallaron'));
     isGenerating = false;
     return;
   }
 
-  // Éxito: mostrar links reales
+  // Algunas fallaron, otras OK — log a consola pero seguir
+  if (errors.length > 0) {
+    console.warn(`${errors.length} de ${entregablesList.length} entregable(s) fallaron:`, errors);
+  }
+
+  // Éxito (parcial o total): mostrar links que sí llegaron
   setTrail(3, 'done'); setTrail(4, 'active');
   document.getElementById('progress-head').textContent = '✅ Proceso Completado';
-  renderResults(ents, n8nResult);
+  renderResults(ents, combinedResult);
   isGenerating = false;
 }
 
