@@ -1419,7 +1419,18 @@ async function runRealMode(webhookUrl, payload, ents) {
     if (res.status === 'fulfilled') {
       const data = res.value;
       if (data.__testing_mode) testingMode = true;
-      else Object.assign(combinedResult, data);
+      else {
+        // Filtrar valores null/undefined antes de combinar.
+        // Algunos Webhook Responses de Make devuelven TODAS las keys posibles
+        // con null para las que no generaron (ej: rama Mortem devuelve
+        // mortem_url + sheets_url:null + ppt_url:null). Si no filtramos,
+        // un null de un response posterior puede pisar una URL real
+        // que vino de un response anterior.
+        const cleaned = Object.fromEntries(
+          Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && v !== '')
+        );
+        Object.assign(combinedResult, cleaned);
+      }
     } else {
       errors.push({
         entregable: entregablesList[idx],
